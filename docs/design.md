@@ -550,6 +550,28 @@ our crate and zarrs' trait definitions. zarrs owns the
 
 ## Future Considerations
 
+- **Extended type support**: The current implementation supports 10 types
+  (i8/i16/i32/i64/u8/u16/u32/u64/f32/f64). A future phase should add support
+  for the full set of zarr numeric types:
+  - **Sub-byte integers**: `int2`, `int4` (stored as 1-byte unpacked by ml_dtypes)
+  - **IEEE 754 float16**: `float16` (Rust: `half::f16`)
+  - **bfloat16**: `bfloat16` (Rust: `half::bf16`)
+  - **8-bit floats**: `float8_e3m4`, `float8_e4m3`, `float8_e4m3b11fnuz`,
+    `float8_e4m3fnuz`, `float8_e5m2`, `float8_e5m2fnuz`, `float8_e8m0fnu`
+  - **Sub-byte floats**: `float4_e2m1fn`, `float6_e2m3fn`, `float6_e3m2fn`
+
+  Key challenges:
+  - The Python binding's `(kind, itemsize)` dispatch can't distinguish types that
+    share the same numpy storage (e.g. float8 variants all report `('f', 1)`).
+    Dispatch must use dtype name strings instead.
+  - Rust crate coverage is uneven: `half` covers f16/bf16, `float8` covers
+    F8E4M3/F8E5M2, `float4` covers F4E2M1. Other float8/float6 variants and
+    int2/int4 lack mature Rust crates and may need custom bit manipulation.
+  - N×N dispatch grows from 100 to 256 match arms (16×16 types). Consider
+    code generation or a widen-at-boundary strategy to manage this.
+  - The feature flag structure in the extension types table above was designed
+    for this expansion.
+
 - **Parallelism**: `convert_slice` over `&mut [Dst]` is amenable to rayon-based
   chunk parallelism for large arrays. The core crate could expose a
   `convert_slice_par` variant.

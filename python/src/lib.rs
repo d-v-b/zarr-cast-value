@@ -53,10 +53,8 @@ where
         }
         let src_f64 = pair[0];
         let tgt_f64 = pair[1];
-        let src_is_nan = src_f64.is_nan();
         result.push(MapEntry {
             src: Src::from_f64(src_f64),
-            src_is_nan,
             tgt: Dst::from_f64(tgt_f64),
         });
     }

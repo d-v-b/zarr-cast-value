@@ -95,7 +95,6 @@ impl OutOfRangeMode {
 #[derive(Debug, Clone, Copy)]
 pub struct MapEntry<Src, Dst> {
     pub src: Src,
-    pub src_is_nan: bool,
     pub tgt: Dst,
 }
 
@@ -156,7 +155,7 @@ fn apply_scalar_map<Src: CastType, Dst: CastType>(
     map_entries: &[MapEntry<Src, Dst>],
 ) -> Option<Dst> {
     for entry in map_entries {
-        if entry.src_is_nan {
+        if entry.src.is_nan() {
             if val.is_nan() {
                 return Some(entry.tgt);
             }
@@ -221,25 +220,27 @@ where
                 return Ok(clamped.cast_into());
             }
             Some(OutOfRangeMode::Wrap) => {
-                // Infinity can't be wrapped — rem_euclid(Inf) is NaN.
-                if Src::IS_FLOAT && val.is_infinite() {
-                    return Err(CastError::NanOrInf {
-                        value: val.to_f64_lossy(),
-                    });
-                }
-                if val < lo || val > hi {
-                    // Wrap via f64 modular arithmetic
-                    let lo_f = lo.to_f64_lossy();
-                    let hi_f = hi.to_f64_lossy();
-                    let range = hi_f - lo_f + 1.0;
-                    let v = val.to_f64_lossy();
-                    let wrapped = ((v - lo_f).rem_euclid(range)) + lo_f;
-                    // We need to get back to Dst from the wrapped f64.
-                    // Since wrap is only valid for integer targets, and the
-                    // wrapped value is guaranteed in [lo, hi], this is safe.
-                    // We go through the CastInto path by constructing via
-                    // the Dst type directly.
-                    return Ok(wrap_f64_to_dst::<Dst>(wrapped));
+                if Src::IS_FLOAT {
+                    // Float→int wrap: Inf can't be wrapped.
+                    if val.is_infinite() {
+                        return Err(CastError::NanOrInf {
+                            value: val.to_f64_lossy(),
+                        });
+                    }
+                    if val < lo || val > hi {
+                        // The value is an integer-valued float (already rounded).
+                        // Use f64 modular arithmetic since Src is already float.
+                        let lo_f = lo.to_f64_lossy();
+                        let hi_f = hi.to_f64_lossy();
+                        let range = hi_f - lo_f + 1.0;
+                        let v = val.to_f64_lossy();
+                        let wrapped = ((v - lo_f).rem_euclid(range)) + lo_f;
+                        return Ok(Dst::from_f64(wrapped));
+                    }
+                } else if val < lo || val > hi {
+                    // Int→int wrap: Rust's `as` cast truncates to the target
+                    // width, which is exactly modular arithmetic. No f64 needed.
+                    return Ok(val.cast_into());
                 }
             }
             None => {
@@ -299,18 +300,22 @@ where
                 return Ok(clamped.cast_into());
             }
             Some(OutOfRangeMode::Wrap) => {
-                if Src::IS_FLOAT && val.is_infinite() {
-                    return Err(CastError::NanOrInf {
-                        value: val.to_f64_lossy(),
-                    });
-                }
-                if val < lo || val > hi {
-                    let lo_f = lo.to_f64_lossy();
-                    let hi_f = hi.to_f64_lossy();
-                    let range = hi_f - lo_f + 1.0;
-                    let v = val.to_f64_lossy();
-                    let wrapped = ((v - lo_f).rem_euclid(range)) + lo_f;
-                    return Ok(wrap_f64_to_dst::<Dst>(wrapped));
+                if Src::IS_FLOAT {
+                    if val.is_infinite() {
+                        return Err(CastError::NanOrInf {
+                            value: val.to_f64_lossy(),
+                        });
+                    }
+                    if val < lo || val > hi {
+                        let lo_f = lo.to_f64_lossy();
+                        let hi_f = hi.to_f64_lossy();
+                        let range = hi_f - lo_f + 1.0;
+                        let v = val.to_f64_lossy();
+                        let wrapped = ((v - lo_f).rem_euclid(range)) + lo_f;
+                        return Ok(Dst::from_f64(wrapped));
+                    }
+                } else if val < lo || val > hi {
+                    return Ok(val.cast_into());
                 }
             }
             None => {
@@ -354,19 +359,8 @@ where
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Helper: wrap f64 back to integer Dst
-// ---------------------------------------------------------------------------
-
-/// Convert a wrapped f64 value to an integer Dst type.
-/// Only called for wrap mode on integer targets, where the value is guaranteed
-/// to be in the target's range.
-fn wrap_f64_to_dst<Dst: CastType>(val: f64) -> Dst {
-    Dst::from_f64(val)
-}
-
-/// Helper trait for constructing a value from f64 (needed for wrap mode
-/// and for constructing MapEntry values from f64 pairs at the Python boundary).
+/// Helper trait for constructing a value from f64 (needed for float→int wrap
+/// mode and for constructing MapEntry values from f64 pairs at the Python boundary).
 pub trait FromF64 {
     fn from_f64(val: f64) -> Self;
 }
@@ -644,6 +638,21 @@ mod tests {
     }
 
     #[test]
+    fn test_int32_to_int8_wrap() {
+        let c = cfg::<i32, i8>(&[], RoundingMode::NearestEven, Some(OutOfRangeMode::Wrap));
+        // 200_i32 as i8 = -56 (bit truncation = modular wrap)
+        assert_eq!(convert_element(200_i32, &c).unwrap(), -56_i8);
+        assert_eq!(convert_element(-200_i32, &c).unwrap(), 56_i8);
+    }
+
+    #[test]
+    fn test_int32_to_uint8_wrap() {
+        let c = cfg::<i32, u8>(&[], RoundingMode::NearestEven, Some(OutOfRangeMode::Wrap));
+        assert_eq!(convert_element(300_i32, &c).unwrap(), 44_u8);
+        assert_eq!(convert_element(-1_i32, &c).unwrap(), 255_u8);
+    }
+
+    #[test]
     fn test_out_of_range_error() {
         let c = cfg::<f64, u8>(&[], RoundingMode::NearestEven, None);
         assert!(convert_element(300.0_f64, &c).is_err());
@@ -683,7 +692,6 @@ mod tests {
     fn test_scalar_map_nan() {
         let entries = vec![MapEntry {
             src: f64::NAN,
-            src_is_nan: true,
             tgt: 0_u8,
         }];
         let c = cfg(&entries, RoundingMode::NearestEven, None);
@@ -694,7 +702,6 @@ mod tests {
     fn test_scalar_map_exact() {
         let entries = vec![MapEntry {
             src: 42.0_f64,
-            src_is_nan: false,
             tgt: 99_u8,
         }];
         let c = cfg(&entries, RoundingMode::NearestEven, None);

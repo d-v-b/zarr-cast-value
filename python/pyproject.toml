@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [tool.maturin]
 python-source = "."
-module-name = "cast_value_rs.cast_value_rs"
+module-name = "cast_value_rs._cast_value_rs"
 
 [project]
 name = "cast-value-rs"

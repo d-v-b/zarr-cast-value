@@ -724,7 +724,7 @@ fn cast_array_into<'py>(
 // ---------------------------------------------------------------------------
 
 #[pymodule]
-fn cast_value_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _cast_value_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cast_array, m)?)?;
     m.add_function(wrap_pyfunction!(cast_array_into, m)?)?;
     Ok(())

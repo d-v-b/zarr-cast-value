@@ -6,7 +6,7 @@
 use numpy::{PyArrayDyn, PyArrayMethods, PyReadonlyArrayDyn, PyUntypedArray};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use zarr_cast_value_core::{
+use zarr_cast_value::{
     CastError, CastFloat, CastInt, CastInto, FloatToFloatConfig, FloatToIntConfig,
     IntToFloatConfig, IntToIntConfig, MapEntry, OutOfRangeMode, RoundingMode,
 };
@@ -67,8 +67,8 @@ fn parse_map_entries<'py, Src, Dst>(
     entries: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Vec<MapEntry<Src, Dst>>>
 where
-    Src: zarr_cast_value_core::CastNum + for<'a> FromPyObject<'a>,
-    Dst: zarr_cast_value_core::CastNum + for<'a> FromPyObject<'a>,
+    Src: zarr_cast_value::CastNum + for<'a> FromPyObject<'a>,
+    Dst: zarr_cast_value::CastNum + for<'a> FromPyObject<'a>,
 {
     let Some(obj) = entries else {
         return Ok(Vec::new());
@@ -178,7 +178,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Failed to get mutable slice from output array")
         })?;
-        zarr_cast_value_core::convert_slice_float_to_int(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_float_to_int(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(output.into_pyobject(py)?.into_any().unbind())
@@ -212,7 +212,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Failed to get mutable slice from output array")
         })?;
-        zarr_cast_value_core::convert_slice_int_to_int(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_int_to_int(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(output.into_pyobject(py)?.into_any().unbind())
@@ -248,7 +248,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Failed to get mutable slice from output array")
         })?;
-        zarr_cast_value_core::convert_slice_float_to_float(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_float_to_float(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(output.into_pyobject(py)?.into_any().unbind())
@@ -282,7 +282,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Failed to get mutable slice from output array")
         })?;
-        zarr_cast_value_core::convert_slice_int_to_float(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_int_to_float(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(output.into_pyobject(py)?.into_any().unbind())
@@ -321,7 +321,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
         })?;
-        zarr_cast_value_core::convert_slice_float_to_int(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_float_to_int(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(py.None())
@@ -354,7 +354,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
         })?;
-        zarr_cast_value_core::convert_slice_int_to_int(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_int_to_int(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(py.None())
@@ -389,7 +389,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
         })?;
-        zarr_cast_value_core::convert_slice_float_to_float(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_float_to_float(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(py.None())
@@ -422,7 +422,7 @@ where
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
         })?;
-        zarr_cast_value_core::convert_slice_int_to_float(src_slice, dst_slice, &config)
+        zarr_cast_value::convert_slice_int_to_float(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
     }
     Ok(py.None())

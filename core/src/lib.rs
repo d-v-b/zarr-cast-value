@@ -1,4 +1,4 @@
-//! zarr-cast-value-core: Pure Rust implementation of the cast_value codec's
+//! zarr-cast-value: Pure Rust implementation of the cast_value codec's
 //! per-element conversion logic.
 //!
 //! This crate is independent of Python/PyO3 and can be used by any Rust consumer
@@ -1082,8 +1082,8 @@ mod tests {
             out_of_range: None,
         };
         assert_eq!(
-            convert_float_to_float(3.14_f32, &c).unwrap(),
-            3.14_f32 as f64
+            convert_float_to_float(1.25_f32, &c).unwrap(),
+            1.25_f32 as f64
         );
     }
 

@@ -1,4 +1,4 @@
-//! End-to-end demonstration of zarrs-style integration with zarr-cast-value-core.
+//! End-to-end demonstration of zarrs-style integration with zarr-cast-value.
 //!
 //! This example simulates the full lifecycle of a `cast_value` codec as it
 //! would appear in a zarrs codec pipeline, **without depending on zarrs**:
@@ -17,7 +17,7 @@
 
 use num_traits::FromPrimitive;
 use serde::Deserialize;
-use zarr_cast_value_core::{
+use zarr_cast_value::{
     FloatToFloatConfig, FloatToIntConfig, IntToFloatConfig, IntToIntConfig, MapEntry,
     OutOfRangeMode, RoundingMode,
 };
@@ -294,7 +294,7 @@ impl CastValueCodec {
         &self,
         src_bytes: &[u8],
         dst_bytes: &mut [u8],
-    ) -> Result<(), zarr_cast_value_core::CastError> {
+    ) -> Result<(), zarr_cast_value::CastError> {
         // Macros to reduce boilerplate in the N x N match below.
         macro_rules! f2i {
             ($src:ty, $dst:ty) => {{
@@ -303,7 +303,7 @@ impl CastValueCodec {
                     rounding: self.rounding,
                     out_of_range: self.out_of_range,
                 };
-                zarr_cast_value_core::convert_slice_float_to_int(
+                zarr_cast_value::convert_slice_float_to_int(
                     bytes_as_slice::<$src>(src_bytes),
                     bytes_as_slice_mut::<$dst>(dst_bytes),
                     &config,
@@ -316,7 +316,7 @@ impl CastValueCodec {
                     map_entries: parse_map_entries_from_json::<$src, $dst>(&self.encode_map),
                     out_of_range: self.out_of_range,
                 };
-                zarr_cast_value_core::convert_slice_int_to_int(
+                zarr_cast_value::convert_slice_int_to_int(
                     bytes_as_slice::<$src>(src_bytes),
                     bytes_as_slice_mut::<$dst>(dst_bytes),
                     &config,
@@ -330,7 +330,7 @@ impl CastValueCodec {
                     rounding: self.rounding,
                     out_of_range: self.out_of_range,
                 };
-                zarr_cast_value_core::convert_slice_float_to_float(
+                zarr_cast_value::convert_slice_float_to_float(
                     bytes_as_slice::<$src>(src_bytes),
                     bytes_as_slice_mut::<$dst>(dst_bytes),
                     &config,
@@ -343,7 +343,7 @@ impl CastValueCodec {
                     map_entries: parse_map_entries_from_json::<$src, $dst>(&self.encode_map),
                     rounding: self.rounding,
                 };
-                zarr_cast_value_core::convert_slice_int_to_float(
+                zarr_cast_value::convert_slice_int_to_float(
                     bytes_as_slice::<$src>(src_bytes),
                     bytes_as_slice_mut::<$dst>(dst_bytes),
                     &config,

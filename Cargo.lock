@@ -14,7 +14,7 @@ version = "0.1.0"
 dependencies = [
  "numpy",
  "pyo3",
- "zarr-cast-value-core",
+ "zarr-cast-value",
 ]
 
 [[package]]
@@ -339,7 +339,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7264e107f553ccae879d21fbea1d6724ac785e8c3bfc762137959b5802826ef3"
 
 [[package]]
-name = "zarr-cast-value-core"
+name = "zarr-cast-value"
 version = "0.1.0"
 dependencies = [
  "num-traits",

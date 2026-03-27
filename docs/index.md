@@ -11,15 +11,14 @@ The `cast_value` codec converts array elements between numeric data types as par
 
 ## Why Rust?
 
-The hot path involves per-element operations -- scalar map lookups, rounding, and range checking -- applied to every value in the array. In pure Python/numpy this requires multiple passes over the data. Rust fuses all steps into a single pass with SIMD acceleration, avoiding intermediate allocations.
+The hot path involves per-element operations -- scalar map lookups, rounding, and range checking -- applied to every value in the array. In pure Python/numpy this requires multiple passes over the data. Rust fuses all steps into a single pass over contiguous memory, avoiding intermediate allocations.
 
 ## Features
 
 - All five rounding modes: `nearest-even`, `towards-zero`, `towards-positive`, `towards-negative`, `nearest-away`
 - Out-of-range handling: `clamp`, `wrap`, or error
 - Scalar map for special values (e.g. NaN to sentinel)
-- float16 support via the `half` crate
-- AVX2 SIMD acceleration for float-to-int conversions with clamping (10-34x speedup)
+- float16 support via the `half` crate (feature-gated)
 
 ## Supported types
 

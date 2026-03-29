@@ -3,11 +3,17 @@
 //! These kernels are the fallback when no architecture-specific kernel is
 //! selected. [`pulp::Arch::new().dispatch(kernel)`][pulp::Arch::dispatch]
 //! selects the best available instruction set at runtime:
-//! - x86_64 without AVX2 → SSE (via `pulp::x86::V1`) or Scalar
-//! - WASM32 with SIMD128 → 128-bit vectors
+//! - x86_64 without AVX2 or AVX1 → Scalar (1 lane)
+//! - WASM32 without SIMD128 → Scalar (1 lane)
 //! - Unsupported architecture → Scalar (1 lane; correct, not vectorized)
 //!
-//! Vectorized operations: NaN detection, clamping, load/store.
+//! Note: pulp only supports Scalar/AVX2/AVX-512 on x86_64. It does NOT support
+//! AVX1 or SSE levels, so this fallback uses scalar operations on older x86_64 CPUs.
+//!
+//! Despite being scalar, this still provides ~2× speedup over pure scalar code due
+//! to better code generation through the abstracted WithSimd interface.
+//!
+//! Vectorized operations (when available): NaN detection, clamping, load/store.
 //! Rounding is done per-lane with scalar ops because the [`pulp::Simd`] trait
 //! intentionally omits `floor`/`ceil`/`trunc` (no universal SIMD encoding).
 

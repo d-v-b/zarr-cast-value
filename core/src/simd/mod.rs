@@ -97,7 +97,7 @@ fn dispatch_f64_to_u8(
         // SAFETY: Runtime check confirmed AVX is available.
         return unsafe { avx::f64_to_u8_clamp(src, dst, rounding) }.map(|()| true);
     }
-    // Fall back to the generic WithSimd kernel (scalar on this CPU).
+    // Fall back to the generic WithSimd kernel.
     generic::f64_to_u8_clamp(src, dst, rounding)
 }
 

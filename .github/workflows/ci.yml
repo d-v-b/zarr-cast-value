@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  rust:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -26,6 +26,21 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy -p zarr-cast-value --tests -- -D warnings
+
+  rust:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            name: x86_64
+          - runner: ubuntu-22.04-arm
+            name: aarch64
+    name: rust (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Test
         run: cargo test -p zarr-cast-value
 

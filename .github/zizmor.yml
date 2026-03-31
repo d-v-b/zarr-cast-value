@@ -6,3 +6,10 @@ rules:
       # PR branch. pull_request_target is required for the action to
       # have permission to add labels.
       - conventional-commits.yml
+
+  superfluous-actions:
+    ignore:
+      # We intentionally use dtolnay/rust-toolchain to pin a specific
+      # stable toolchain and install components (rustfmt, clippy).
+      - ci.yml
+      - cd.yml

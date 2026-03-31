@@ -82,21 +82,17 @@ fn bench_f64_to_u8(c: &mut Criterion) {
             rounding: RoundingMode::NearestEven,
             out_of_range: Some(OutOfRangeMode::Clamp),
         };
-        group.bench_with_input(
-            BenchmarkId::new("f64_to_u8/clamp", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0u8; n];
-                b.iter(|| {
-                    convert_slice_float_to_int(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config),
-                    )
-                    .unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("f64_to_u8/clamp", n), &n, |b, &n| {
+            let mut dst = vec![0u8; n];
+            b.iter(|| {
+                convert_slice_float_to_int(
+                    black_box(&src),
+                    black_box(&mut dst),
+                    black_box(&config),
+                )
+                .unwrap();
+            });
+        });
 
         let src_mixed = f64_mixed(n);
         let config_map = FloatToIntConfig {
@@ -134,21 +130,17 @@ fn bench_f64_to_u8(c: &mut Criterion) {
             rounding: RoundingMode::NearestEven,
             out_of_range: Some(OutOfRangeMode::Wrap),
         };
-        group.bench_with_input(
-            BenchmarkId::new("f64_to_u8/wrap", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0u8; n];
-                b.iter(|| {
-                    convert_slice_float_to_int(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config_wrap),
-                    )
-                    .unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("f64_to_u8/wrap", n), &n, |b, &n| {
+            let mut dst = vec![0u8; n];
+            b.iter(|| {
+                convert_slice_float_to_int(
+                    black_box(&src),
+                    black_box(&mut dst),
+                    black_box(&config_wrap),
+                )
+                .unwrap();
+            });
+        });
 
         for mode in [
             RoundingMode::TowardsZero,
@@ -193,21 +185,17 @@ fn bench_f64_to_i32(c: &mut Criterion) {
             rounding: RoundingMode::NearestEven,
             out_of_range: Some(OutOfRangeMode::Clamp),
         };
-        group.bench_with_input(
-            BenchmarkId::new("f64_to_i32/clamp", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0i32; n];
-                b.iter(|| {
-                    convert_slice_float_to_int(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config),
-                    )
-                    .unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("f64_to_i32/clamp", n), &n, |b, &n| {
+            let mut dst = vec![0i32; n];
+            b.iter(|| {
+                convert_slice_float_to_int(
+                    black_box(&src),
+                    black_box(&mut dst),
+                    black_box(&config),
+                )
+                .unwrap();
+            });
+        });
     }
     group.finish();
 }
@@ -227,41 +215,29 @@ fn bench_i32_to_u8(c: &mut Criterion) {
             map_entries: vec![],
             out_of_range: Some(OutOfRangeMode::Clamp),
         };
-        group.bench_with_input(
-            BenchmarkId::new("i32_to_u8/clamp", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0u8; n];
-                b.iter(|| {
-                    convert_slice_int_to_int(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config),
-                    )
+        group.bench_with_input(BenchmarkId::new("i32_to_u8/clamp", n), &n, |b, &n| {
+            let mut dst = vec![0u8; n];
+            b.iter(|| {
+                convert_slice_int_to_int(black_box(&src), black_box(&mut dst), black_box(&config))
                     .unwrap();
-                });
-            },
-        );
+            });
+        });
 
         let config_wrap = IntToIntConfig {
             map_entries: vec![],
             out_of_range: Some(OutOfRangeMode::Wrap),
         };
-        group.bench_with_input(
-            BenchmarkId::new("i32_to_u8/wrap", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0u8; n];
-                b.iter(|| {
-                    convert_slice_int_to_int(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config_wrap),
-                    )
-                    .unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("i32_to_u8/wrap", n), &n, |b, &n| {
+            let mut dst = vec![0u8; n];
+            b.iter(|| {
+                convert_slice_int_to_int(
+                    black_box(&src),
+                    black_box(&mut dst),
+                    black_box(&config_wrap),
+                )
+                .unwrap();
+            });
+        });
 
         let src_mixed = i32_mixed(n);
         let config_map = IntToIntConfig {
@@ -328,21 +304,17 @@ fn bench_f64_to_f32(c: &mut Criterion) {
             rounding: RoundingMode::NearestEven,
             out_of_range: Some(OutOfRangeMode::Clamp),
         };
-        group.bench_with_input(
-            BenchmarkId::new("f64_to_f32/clamp", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0f32; n];
-                b.iter(|| {
-                    convert_slice_float_to_float(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config_clamp),
-                    )
-                    .unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("f64_to_f32/clamp", n), &n, |b, &n| {
+            let mut dst = vec![0f32; n];
+            b.iter(|| {
+                convert_slice_float_to_float(
+                    black_box(&src),
+                    black_box(&mut dst),
+                    black_box(&config_clamp),
+                )
+                .unwrap();
+            });
+        });
     }
     group.finish();
 }
@@ -418,21 +390,17 @@ fn bench_f32_to_u8(c: &mut Criterion) {
             rounding: RoundingMode::NearestEven,
             out_of_range: Some(OutOfRangeMode::Clamp),
         };
-        group.bench_with_input(
-            BenchmarkId::new("f32_to_u8/clamp", n),
-            &n,
-            |b, &n| {
-                let mut dst = vec![0u8; n];
-                b.iter(|| {
-                    convert_slice_float_to_int(
-                        black_box(&src),
-                        black_box(&mut dst),
-                        black_box(&config),
-                    )
-                    .unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("f32_to_u8/clamp", n), &n, |b, &n| {
+            let mut dst = vec![0u8; n];
+            b.iter(|| {
+                convert_slice_float_to_int(
+                    black_box(&src),
+                    black_box(&mut dst),
+                    black_box(&config),
+                )
+                .unwrap();
+            });
+        });
     }
     group.finish();
 }

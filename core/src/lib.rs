@@ -644,8 +644,7 @@ where
         use std::any::TypeId;
 
         // f64 → i32
-        if TypeId::of::<Src>() == TypeId::of::<f64>()
-            && TypeId::of::<Dst>() == TypeId::of::<i32>()
+        if TypeId::of::<Src>() == TypeId::of::<f64>() && TypeId::of::<Dst>() == TypeId::of::<i32>()
         {
             let src_f64: &[f64] =
                 unsafe { std::slice::from_raw_parts(src.as_ptr() as *const f64, src.len()) };
@@ -697,8 +696,7 @@ where
     if config.map_entries.is_empty() && config.rounding == RoundingMode::NearestEven {
         use std::any::TypeId;
 
-        if TypeId::of::<Src>() == TypeId::of::<f64>()
-            && TypeId::of::<Dst>() == TypeId::of::<f32>()
+        if TypeId::of::<Src>() == TypeId::of::<f64>() && TypeId::of::<Dst>() == TypeId::of::<f32>()
         {
             // SAFETY: We just verified Src == f64 and Dst == f32 via TypeId.
             let src_f64: &[f64] =

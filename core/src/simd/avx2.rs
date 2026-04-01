@@ -263,6 +263,159 @@ pub(super) unsafe fn f32_to_u8_clamp(
     Ok(())
 }
 
+/// Convert f64 slice to f32 slice using nearest-even (two-pass).
+///
+/// Pass 1: `_mm256_cvtpd_ps` narrows 4 f64 → 4 f32 (128-bit result).
+/// Pass 2 (if `error_on_overflow`): scan for finite→infinite overflow.
+///
+/// # Safety
+///
+/// Caller must ensure AVX2 + SSE4.1 are available.
+#[target_feature(enable = "avx2")]
+pub(super) unsafe fn f64_to_f32_nearest(
+    simd: V3,
+    src: &[f64],
+    dst: &mut [f32],
+    error_on_overflow: bool,
+) -> Result<(), crate::CastError> {
+    let _ = simd;
+    let n = src.len();
+    let simd_len = n / 4 * 4;
+
+    // Pass 1: branch-free narrowing
+    for i in (0..simd_len).step_by(4) {
+        let v = _mm256_loadu_pd(src.as_ptr().add(i));
+        // _mm256_cvtpd_ps: 4 f64 → 4 f32 (returns __m128)
+        let narrowed = _mm256_cvtpd_ps(v);
+        _mm_storeu_ps(dst.as_mut_ptr().add(i), narrowed);
+    }
+    for i in simd_len..n {
+        dst[i] = src[i] as f32;
+    }
+
+    // Pass 2: overflow check
+    if error_on_overflow {
+        let inf_ps = _mm_set1_ps(f32::INFINITY);
+        for i in (0..simd_len).step_by(4) {
+            let result = _mm_loadu_ps(dst.as_ptr().add(i));
+            let abs_result = _mm_andnot_ps(_mm_set1_ps(-0.0), result);
+            let is_inf = _mm_cmpeq_ps(abs_result, inf_ps);
+            if _mm_movemask_ps(is_inf) != 0 {
+                for (&sv, &dv) in src[i..].iter().zip(dst[i..].iter()).take(4) {
+                    if sv.is_finite() && dv.is_infinite() {
+                        return Err(crate::CastError::OutOfRange {
+                            value: sv,
+                            lo: f32::MIN as f64,
+                            hi: f32::MAX as f64,
+                        });
+                    }
+                }
+            }
+        }
+        for i in simd_len..n {
+            if src[i].is_finite() && dst[i].is_infinite() {
+                return Err(crate::CastError::OutOfRange {
+                    value: src[i],
+                    lo: f32::MIN as f64,
+                    hi: f32::MAX as f64,
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Convert f64 slice to i32 slice with rounding, error on out-of-range.
+///
+/// Same pipeline as `f64_to_i32_clamp` but checks range instead of clamping.
+///
+/// # Safety
+///
+/// Caller must ensure AVX2 + SSE4.1 are available.
+#[target_feature(enable = "avx2")]
+pub(super) unsafe fn f64_to_i32_check(
+    simd: V3,
+    src: &[f64],
+    dst: &mut [i32],
+    rounding: RoundingMode,
+) -> Result<(), crate::CastError> {
+    let _ = simd;
+    let round_mode = avx2_round_mode(rounding);
+    let n = src.len();
+    let simd_len = n / 4 * 4;
+
+    let lo = _mm256_set1_pd(i32::MIN as f64);
+    let hi = _mm256_set1_pd(i32::MAX as f64);
+
+    for i in (0..simd_len).step_by(4) {
+        let v = _mm256_loadu_pd(src.as_ptr().add(i));
+
+        // NaN check
+        let nan_mask = _mm256_cmp_pd(v, v, _CMP_UNORD_Q);
+        if _mm256_movemask_pd(nan_mask) != 0 {
+            for &val in &src[i..std::cmp::min(i + 4, n)] {
+                if val.is_nan() {
+                    return Err(crate::CastError::NanOrInf { value: val });
+                }
+            }
+        }
+
+        let r = round_f64(v, round_mode);
+
+        // Range check: error if any value < lo or > hi
+        let below = _mm256_cmp_pd(r, lo, _CMP_LT_OQ);
+        let above = _mm256_cmp_pd(r, hi, _CMP_GT_OQ);
+        let out_of_range = _mm256_or_pd(below, above);
+        if _mm256_movemask_pd(out_of_range) != 0 {
+            for &val in &src[i..std::cmp::min(i + 4, n)] {
+                let rounded = match rounding {
+                    RoundingMode::NearestEven => val.round_ties_even(),
+                    RoundingMode::TowardsZero => val.trunc(),
+                    RoundingMode::TowardsPositive => val.ceil(),
+                    RoundingMode::TowardsNegative => val.floor(),
+                    RoundingMode::NearestAway => unreachable!(),
+                };
+                if rounded < i32::MIN as f64 || rounded > i32::MAX as f64 {
+                    return Err(crate::CastError::OutOfRange {
+                        value: val,
+                        lo: i32::MIN as f64,
+                        hi: i32::MAX as f64,
+                    });
+                }
+            }
+        }
+
+        let converted = _mm256_cvtpd_epi32(r);
+        _mm_storeu_si128(dst.as_mut_ptr().add(i) as *mut __m128i, converted);
+    }
+
+    // Scalar tail
+    for i in simd_len..n {
+        let val = src[i];
+        if val.is_nan() {
+            return Err(crate::CastError::NanOrInf { value: val });
+        }
+        let rounded = match rounding {
+            RoundingMode::NearestEven => val.round_ties_even(),
+            RoundingMode::TowardsZero => val.trunc(),
+            RoundingMode::TowardsPositive => val.ceil(),
+            RoundingMode::TowardsNegative => val.floor(),
+            RoundingMode::NearestAway => unreachable!(),
+        };
+        if rounded < i32::MIN as f64 || rounded > i32::MAX as f64 {
+            return Err(crate::CastError::OutOfRange {
+                value: val,
+                lo: i32::MIN as f64,
+                hi: i32::MAX as f64,
+            });
+        }
+        dst[i] = rounded as i32;
+    }
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Rounding helpers
 // ---------------------------------------------------------------------------

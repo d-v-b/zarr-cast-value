@@ -282,6 +282,22 @@ fn dispatch_f32_to_u8(
 // Dispatch: f64 → f32 (nearest-even)
 // ---------------------------------------------------------------------------
 
+#[cfg(target_arch = "x86_64")]
+fn dispatch_f64_to_f32(
+    src: &[f64],
+    dst: &mut [f32],
+    error_on_overflow: bool,
+) -> Result<bool, crate::CastError> {
+    if let pulp::x86::Arch::V3(simd) = pulp::x86::Arch::new() {
+        return unsafe { avx2::f64_to_f32_nearest(simd, src, dst, error_on_overflow) }
+            .map(|()| true);
+    }
+    if is_x86_feature_detected!("avx") {
+        return unsafe { avx::f64_to_f32_nearest(src, dst, error_on_overflow) }.map(|()| true);
+    }
+    Ok(false)
+}
+
 #[cfg(target_arch = "aarch64")]
 fn dispatch_f64_to_f32(
     src: &[f64],
@@ -291,7 +307,28 @@ fn dispatch_f64_to_f32(
     unsafe { aarch64::f64_to_f32_nearest(src, dst, error_on_overflow) }.map(|()| true)
 }
 
-#[cfg(not(target_arch = "aarch64"))]
+#[cfg(target_arch = "wasm32")]
+fn dispatch_f64_to_f32(
+    src: &[f64],
+    dst: &mut [f32],
+    error_on_overflow: bool,
+) -> Result<bool, crate::CastError> {
+    #[cfg(target_feature = "simd128")]
+    {
+        return unsafe { wasm32::f64_to_f32_nearest(src, dst, error_on_overflow) }.map(|()| true);
+    }
+    #[cfg(not(target_feature = "simd128"))]
+    {
+        let _ = (src, dst, error_on_overflow);
+        Ok(false)
+    }
+}
+
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "wasm32"
+)))]
 fn dispatch_f64_to_f32(
     _src: &[f64],
     _dst: &mut [f32],
@@ -304,6 +341,21 @@ fn dispatch_f64_to_f32(
 // Dispatch: f64 → i32 (range-check, no clamp)
 // ---------------------------------------------------------------------------
 
+#[cfg(target_arch = "x86_64")]
+fn dispatch_f64_to_i32_check(
+    src: &[f64],
+    dst: &mut [i32],
+    rounding: RoundingMode,
+) -> Result<bool, crate::CastError> {
+    if let pulp::x86::Arch::V3(simd) = pulp::x86::Arch::new() {
+        return unsafe { avx2::f64_to_i32_check(simd, src, dst, rounding) }.map(|()| true);
+    }
+    if is_x86_feature_detected!("avx") {
+        return unsafe { avx::f64_to_i32_check(src, dst, rounding) }.map(|()| true);
+    }
+    Ok(false)
+}
+
 #[cfg(target_arch = "aarch64")]
 fn dispatch_f64_to_i32_check(
     src: &[f64],
@@ -313,7 +365,28 @@ fn dispatch_f64_to_i32_check(
     unsafe { aarch64::f64_to_i32_check(src, dst, rounding) }.map(|()| true)
 }
 
-#[cfg(not(target_arch = "aarch64"))]
+#[cfg(target_arch = "wasm32")]
+fn dispatch_f64_to_i32_check(
+    src: &[f64],
+    dst: &mut [i32],
+    rounding: RoundingMode,
+) -> Result<bool, crate::CastError> {
+    #[cfg(target_feature = "simd128")]
+    {
+        return unsafe { wasm32::f64_to_i32_check(src, dst, rounding) }.map(|()| true);
+    }
+    #[cfg(not(target_feature = "simd128"))]
+    {
+        let _ = (src, dst, rounding);
+        Ok(false)
+    }
+}
+
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "wasm32"
+)))]
 fn dispatch_f64_to_i32_check(
     _src: &[f64],
     _dst: &mut [i32],

@@ -194,6 +194,138 @@ pub(super) unsafe fn f64_to_i32_clamp(
 }
 
 // ---------------------------------------------------------------------------
+// f64 → f32 narrowing
+// ---------------------------------------------------------------------------
+
+/// Convert f64 slice to f32 slice using nearest-even (two-pass, WASM SIMD128).
+///
+/// `f32x4_demote_f64x2_zero` narrows 2 f64 → 2 f32 (lower lanes of f32x4).
+///
+/// # Safety
+///
+/// Caller must ensure WASM SIMD128 feature is available.
+pub(super) unsafe fn f64_to_f32_nearest(
+    src: &[f64],
+    dst: &mut [f32],
+    error_on_overflow: bool,
+) -> Result<(), crate::CastError> {
+    let n = src.len();
+    let simd_len = n / 2 * 2;
+
+    // Pass 1: branch-free narrowing
+    for i in (0..simd_len).step_by(2) {
+        let v = v128_load(src.as_ptr().add(i) as *const v128);
+        // f32x4_demote_f64x2_zero: 2 f64 → lower 2 lanes of f32x4
+        let narrowed = f32x4_demote_f64x2_zero(v);
+        // Extract and store 2 f32 values
+        dst[i] = f32x4_extract_lane::<0>(narrowed);
+        dst[i + 1] = f32x4_extract_lane::<1>(narrowed);
+    }
+    for i in simd_len..n {
+        dst[i] = src[i] as f32;
+    }
+
+    // Pass 2: overflow check
+    if error_on_overflow {
+        for i in 0..n {
+            if src[i].is_finite() && dst[i].is_infinite() {
+                return Err(crate::CastError::OutOfRange {
+                    value: src[i],
+                    lo: f32::MIN as f64,
+                    hi: f32::MAX as f64,
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// f64 → i32 with range check
+// ---------------------------------------------------------------------------
+
+/// Convert f64 slice to i32 slice with rounding, error on out-of-range (WASM SIMD128).
+///
+/// # Safety
+///
+/// Caller must ensure WASM SIMD128 feature is available.
+pub(super) unsafe fn f64_to_i32_check(
+    src: &[f64],
+    dst: &mut [i32],
+    rounding: RoundingMode,
+) -> Result<(), crate::CastError> {
+    let mut i = 0;
+    let len = src.len();
+
+    let lo_val = i32::MIN as f64;
+    let hi_val = i32::MAX as f64;
+
+    while i + 2 <= len {
+        let v = v128_load(src.as_ptr().add(i) as *const v128);
+
+        if any_nan_f64x2(v) {
+            for &val in &src[i..i + 2] {
+                if val.is_nan() {
+                    return Err(crate::CastError::NanOrInf { value: val });
+                }
+            }
+        }
+
+        let rounded = round_f64x2(v, rounding);
+
+        // Range check via lane extraction (WASM lacks f64x2 compare-to-mask)
+        let r0 = f64x2_extract_lane::<0>(rounded);
+        let r1 = f64x2_extract_lane::<1>(rounded);
+        if r0 < lo_val || r0 > hi_val {
+            return Err(crate::CastError::OutOfRange {
+                value: f64x2_extract_lane::<0>(v),
+                lo: lo_val,
+                hi: hi_val,
+            });
+        }
+        if r1 < lo_val || r1 > hi_val {
+            return Err(crate::CastError::OutOfRange {
+                value: f64x2_extract_lane::<1>(v),
+                lo: lo_val,
+                hi: hi_val,
+            });
+        }
+
+        let i32_vals = i32x4_trunc_sat_f64x2_zero(rounded);
+        dst[i] = i32x4_extract_lane::<0>(i32_vals);
+        dst[i + 1] = i32x4_extract_lane::<1>(i32_vals);
+
+        i += 2;
+    }
+
+    // Scalar tail
+    for idx in i..len {
+        let val = src[idx];
+        if val.is_nan() {
+            return Err(crate::CastError::NanOrInf { value: val });
+        }
+        let rounded = match rounding {
+            RoundingMode::NearestEven => val.round_ties_even(),
+            RoundingMode::TowardsZero => val.trunc(),
+            RoundingMode::TowardsPositive => val.ceil(),
+            RoundingMode::TowardsNegative => val.floor(),
+            RoundingMode::NearestAway => unreachable!(),
+        };
+        if rounded < lo_val || rounded > hi_val {
+            return Err(crate::CastError::OutOfRange {
+                value: val,
+                lo: lo_val,
+                hi: hi_val,
+            });
+        }
+        dst[idx] = rounded as i32;
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // f32 → u8 with clamping
 // ---------------------------------------------------------------------------
 

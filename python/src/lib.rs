@@ -4,7 +4,9 @@
 //! numpy dtype pairs to monomorphized conversion calls from the core crate.
 
 use half::f16;
-use numpy::{PyArrayDyn, PyArrayMethods, PyReadonlyArrayDyn, PyUntypedArray};
+use numpy::{
+    PyArrayDyn, PyArrayMethods, PyReadonlyArrayDyn, PyUntypedArray, PyUntypedArrayMethods,
+};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use zarr_cast_value::{
@@ -225,7 +227,7 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element + 'static,
     Dst: CastInt + ExtractFromPy + numpy::Element + 'static,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -234,7 +236,7 @@ where
         rounding,
         out_of_range: oor,
     };
-    let shape: Vec<usize> = arr.getattr("shape")?.extract()?;
+    let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
     {
         // SAFETY: We just created `output` and hold the GIL, so no other
@@ -263,7 +265,7 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastInt + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -271,7 +273,7 @@ where
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         out_of_range: oor,
     };
-    let shape: Vec<usize> = arr.getattr("shape")?.extract()?;
+    let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
     {
         // SAFETY: We just created `output` and hold the GIL, so no other
@@ -300,7 +302,7 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastFloat + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -309,7 +311,7 @@ where
         rounding,
         out_of_range: oor,
     };
-    let shape: Vec<usize> = arr.getattr("shape")?.extract()?;
+    let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
     {
         // SAFETY: We just created `output` and hold the GIL, so no other
@@ -337,7 +339,7 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastFloat + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -345,7 +347,7 @@ where
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
     };
-    let shape: Vec<usize> = arr.getattr("shape")?.extract()?;
+    let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
     {
         // SAFETY: We just created `output` and hold the GIL, so no other
@@ -378,7 +380,7 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element + 'static,
     Dst: CastInt + ExtractFromPy + numpy::Element + 'static,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -414,7 +416,7 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastInt + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -450,7 +452,7 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastFloat + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -486,7 +488,7 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastFloat + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.extract()?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
     let src_slice = input_arr
         .as_slice()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
@@ -848,8 +850,8 @@ fn cast_array_into<'py>(
     let tgt_dtype = array_dtype_key(out)?;
 
     // Validate shapes match
-    let src_shape: Vec<usize> = arr.getattr("shape")?.extract()?;
-    let dst_shape: Vec<usize> = out.getattr("shape")?.extract()?;
+    let src_shape: Vec<usize> = arr.shape().to_vec();
+    let dst_shape: Vec<usize> = out.shape().to_vec();
     if src_shape != dst_shape {
         return Err(pyo3::exceptions::PyValueError::new_err(format!(
             "Shape mismatch: input shape {:?} != output shape {:?}",

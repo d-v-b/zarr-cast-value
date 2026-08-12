@@ -217,6 +217,39 @@ fn array_dtype_key(arr: &Bound<'_, PyUntypedArray>) -> PyResult<&'static str> {
 // Per-path conversion helpers (avoid duplicating the numpy I/O boilerplate)
 // ---------------------------------------------------------------------------
 
+/// Borrow a readonly view of `arr`, requiring row-major (C) memory layout.
+///
+/// The conversion kernels read the input buffer as a flat slice and write
+/// their results into a freshly allocated row-major output, so the buffer
+/// they read must be in row-major element order.
+///
+/// `PyReadonlyArray::as_slice` alone is not a sufficient guard: it accepts
+/// column-major arrays too, and handing a column-major buffer to the kernels
+/// silently transposes the data. Normalizing the layout here (e.g. via
+/// `ndarray::as_standard_layout`) is also off the table: `ndarray`'s raw-view
+/// stride checks panic on layouts numpy considers legal, such as zero-size
+/// arrays with negative strides. So the binding strictly validates, and the
+/// Python wrapper normalizes arbitrary layouts with
+/// `np.asarray(arr, order="C")` -- numpy's own, authoritative implementation
+/// -- before calling in. For callers of the wrapper this rejection is
+/// unreachable; it is a backstop for direct users of the private extension
+/// module.
+fn readonly_row_major<'py, T: numpy::Element>(
+    arr: &Bound<'py, PyUntypedArray>,
+) -> PyResult<PyReadonlyArrayDyn<'py, T>> {
+    // NB: numpy flags 0-d and zero-size arrays as C-contiguous, so those
+    // always pass.
+    if !arr.is_c_contiguous() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "Input array must be row-major (C-contiguous)",
+        ));
+    }
+    Ok(arr.downcast::<PyArrayDyn<T>>()?.readonly())
+}
+
+/// Panic message for `as_slice` on an array `readonly_row_major` accepted.
+const C_CONTIGUOUS_SLICE: &str = "a C-contiguous array's buffer is a valid slice";
+
 /// Perform a float→int conversion on numpy arrays.
 fn do_float_to_int_alloc<'py, Src, Dst>(
     py: Python<'py>,
@@ -231,10 +264,8 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element + 'static,
     Dst: CastInt + ExtractFromPy + numpy::Element + 'static,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = FloatToIntConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
@@ -242,7 +273,10 @@ where
     };
     let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !shape.contains(&0) {
         // SAFETY: We just created `output` and hold the GIL, so no other
         // code can alias this array. The mutable reference is valid for
         // the duration of this block.
@@ -269,17 +303,18 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastInt + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = IntToIntConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         out_of_range: oor,
     };
     let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !shape.contains(&0) {
         // SAFETY: We just created `output` and hold the GIL, so no other
         // code can alias this array.
         let mut output_rw = unsafe { output.as_array_mut() };
@@ -306,10 +341,8 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element + 'static,
     Dst: CastFloat + ExtractFromPy + numpy::Element + 'static,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = FloatToFloatConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
@@ -317,7 +350,10 @@ where
     };
     let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !shape.contains(&0) {
         // SAFETY: We just created `output` and hold the GIL, so no other
         // code can alias this array.
         let mut output_rw = unsafe { output.as_array_mut() };
@@ -343,17 +379,18 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastFloat + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = IntToFloatConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
     };
     let shape: Vec<usize> = arr.shape().to_vec();
     let output = PyArrayDyn::<Dst>::zeros(py, &shape[..], false);
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !shape.contains(&0) {
         // SAFETY: We just created `output` and hold the GIL, so no other
         // code can alias this array.
         let mut output_rw = unsafe { output.as_array_mut() };
@@ -384,22 +421,25 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element + 'static,
     Dst: CastInt + ExtractFromPy + numpy::Element + 'static,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = FloatToIntConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
         out_of_range: oor,
     };
     let out_arr: &Bound<'_, PyArrayDyn<Dst>> = out.downcast()?;
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !out.shape().contains(&0) {
         // SAFETY: The GIL is held and `out_arr` is a distinct array from
         // `input_arr` (different dtypes). No aliasing occurs.
         let mut output_rw = unsafe { out_arr.as_array_mut() };
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
+            pyo3::exceptions::PyValueError::new_err(
+                "Output array must be row-major (C-contiguous) and writeable",
+            )
         })?;
         zarr_cast_value::convert_slice_float_to_int(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
@@ -420,21 +460,24 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastInt + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = IntToIntConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         out_of_range: oor,
     };
     let out_arr: &Bound<'_, PyArrayDyn<Dst>> = out.downcast()?;
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !out.shape().contains(&0) {
         // SAFETY: The GIL is held and `out_arr` is a distinct array from
         // `input_arr`. No aliasing occurs.
         let mut output_rw = unsafe { out_arr.as_array_mut() };
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
+            pyo3::exceptions::PyValueError::new_err(
+                "Output array must be row-major (C-contiguous) and writeable",
+            )
         })?;
         zarr_cast_value::convert_slice_int_to_int(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
@@ -456,22 +499,25 @@ where
     Src: CastFloat + CastInto<Dst> + ExtractFromPy + numpy::Element + 'static,
     Dst: CastFloat + ExtractFromPy + numpy::Element + 'static,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = FloatToFloatConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
         out_of_range: oor,
     };
     let out_arr: &Bound<'_, PyArrayDyn<Dst>> = out.downcast()?;
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !out.shape().contains(&0) {
         // SAFETY: The GIL is held and `out_arr` is a distinct array from
         // `input_arr`. No aliasing occurs.
         let mut output_rw = unsafe { out_arr.as_array_mut() };
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
+            pyo3::exceptions::PyValueError::new_err(
+                "Output array must be row-major (C-contiguous) and writeable",
+            )
         })?;
         zarr_cast_value::convert_slice_float_to_float(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;
@@ -492,21 +538,24 @@ where
     Src: CastInt + CastInto<Dst> + ExtractFromPy + numpy::Element,
     Dst: CastFloat + ExtractFromPy + numpy::Element,
 {
-    let input_arr: PyReadonlyArrayDyn<'_, Src> = arr.downcast::<PyArrayDyn<Src>>()?.readonly();
-    let src_slice = input_arr
-        .as_slice()
-        .map_err(|_| pyo3::exceptions::PyValueError::new_err("Input array must be contiguous"))?;
+    let input_arr: PyReadonlyArrayDyn<'_, Src> = readonly_row_major(arr)?;
+    let src_slice = input_arr.as_slice().expect(C_CONTIGUOUS_SLICE);
     let config = IntToFloatConfig {
         map_entries: parse_map_entries::<Src, Dst>(map_entries_py, src_dtype, tgt_dtype)?,
         rounding,
     };
     let out_arr: &Bound<'_, PyArrayDyn<Dst>> = out.downcast()?;
-    {
+    // Zero-size arrays skip the conversion: there is nothing to convert, and
+    // numpy gives all zero-size arrays strides of 0, which `as_array_mut`'s
+    // debug-build stride assertions reject as self-overlapping.
+    if !out.shape().contains(&0) {
         // SAFETY: The GIL is held and `out_arr` is a distinct array from
         // `input_arr`. No aliasing occurs.
         let mut output_rw = unsafe { out_arr.as_array_mut() };
         let dst_slice = output_rw.as_slice_mut().ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err("Output array must be contiguous and writeable")
+            pyo3::exceptions::PyValueError::new_err(
+                "Output array must be row-major (C-contiguous) and writeable",
+            )
         })?;
         zarr_cast_value::convert_slice_int_to_float(src_slice, dst_slice, &config)
             .map_err(cast_error_to_pyerr)?;

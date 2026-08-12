@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from cast_value_rs._cast_value_rs import cast_array as _cast_array
-from cast_value_rs._cast_value_rs import cast_array_into
+from cast_value_rs._cast_value_rs import cast_array_into as _cast_array_into
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -64,6 +64,21 @@ def _resolve_dtype(target_dtype: DTypeName | np.dtype[np.generic] | type[np.gene
     return name
 
 
+def _as_row_major(arr: npt.NDArray[np.generic]) -> npt.NDArray[np.generic]:
+    """Return ``arr`` in row-major (C) layout with well-formed strides.
+
+    The extension module requires row-major input; ``np.asarray`` with
+    ``order="C"`` is a no-op for arrays that already are, and copies views of
+    any other layout (e.g. the transposed views the Zarr transpose codec
+    produces). Unlike ``np.ascontiguousarray``, it preserves 0-d shapes.
+
+    Zero-size arrays pass through unchanged (numpy flags them all
+    C-contiguous, whatever their strides); the extension module skips the
+    conversion for them.
+    """
+    return np.asarray(arr, order="C")
+
+
 def cast_array(
     arr: npt.NDArray[np.generic],
     *,
@@ -98,8 +113,46 @@ def cast_array(
         A new numpy array with the target dtype.
     """
     return _cast_array(
-        arr,
+        _as_row_major(arr),
         target_dtype=_resolve_dtype(target_dtype),
+        rounding_mode=rounding_mode,
+        out_of_range_mode=out_of_range_mode,
+        scalar_map_entries=scalar_map_entries,
+    )
+
+
+def cast_array_into(
+    arr: npt.NDArray[np.generic],
+    out: npt.NDArray[np.generic],
+    *,
+    rounding_mode: RoundingMode,
+    out_of_range_mode: OutOfRangeMode | None = None,
+    scalar_map_entries: (
+        dict[float, float] | Iterable[tuple[float, float]] | None
+    ) = None,
+) -> None:
+    """Cast a numpy array to a new dtype, writing into a pre-allocated array.
+
+    Parameters
+    ----------
+    arr
+        Input numpy array.
+    out
+        Output numpy array. Determines the target dtype; must be row-major
+        (C-contiguous), writeable, and the same shape as ``arr``.
+    rounding_mode
+        How to round values during conversion.
+    out_of_range_mode
+        How to handle values outside the target type's range.
+        ``None`` means out-of-range values raise an error.
+    scalar_map_entries
+        Mapping of special source values to target values.
+    """
+    # The output array is the caller's buffer, so it cannot be copied; the
+    # extension module rejects it if it is not row-major and writeable.
+    _cast_array_into(
+        _as_row_major(arr),
+        out,
         rounding_mode=rounding_mode,
         out_of_range_mode=out_of_range_mode,
         scalar_map_entries=scalar_map_entries,

@@ -9,14 +9,29 @@ module-name = "cast_value_rs._cast_value_rs"
 [project]
 name = "cast-value-rs"
 description = "Python bindings for the Zarr cast_value codec"
+readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT OR Apache-2.0"}
+keywords = ["zarr", "codec", "cast", "numpy", "rust"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
 ]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://zarr-developers.github.io/cast-value.rs/"
+Documentation = "https://zarr-developers.github.io/cast-value.rs/"
+Repository = "https://github.com/zarr-developers/cast-value.rs"
+Issues = "https://github.com/zarr-developers/cast-value.rs/issues"
 
 [dependency-groups]
 test = ["pytest", "numpy"]

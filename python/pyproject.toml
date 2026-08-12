@@ -34,7 +34,7 @@ Repository = "https://github.com/zarr-developers/cast-value.rs"
 Issues = "https://github.com/zarr-developers/cast-value.rs/issues"
 
 [dependency-groups]
-test = ["pytest", "numpy"]
+test = ["pytest", "numpy", "hypothesis"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

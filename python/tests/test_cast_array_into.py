@@ -7,7 +7,7 @@ import pytest
 
 from cast_value_rs import cast_array_into
 
-from .conftest import Expect, ExpectFail
+from .conftest import LAYOUT_DTYPE_PATHS, Expect, ExpectFail, layout_arrays
 
 
 def _run_into(case: Expect) -> None:
@@ -111,6 +111,15 @@ CAST_INTO_FAIL_CASES = [
         exception=ValueError, match="Shape mismatch",
         id="shape-mismatch",
     ),
+    ExpectFail(
+        input=dict(
+            arr=np.arange(6, dtype=np.float64).reshape(2, 3),
+            out=np.zeros((3, 2), dtype=np.uint8).T,
+            rounding_mode="nearest-even",
+        ),
+        exception=ValueError, match="row-major",
+        id="column-major-output",
+    ),
 ]
 
 
@@ -119,3 +128,30 @@ CAST_INTO_FAIL_CASES = [
 )
 def test_cast_array_into_errors(case: ExpectFail):
     case.check(cast_array_into)
+
+
+# ---------------------------------------------------------------------------
+# Memory layout
+# ---------------------------------------------------------------------------
+
+INPUT_LAYOUT_CASES = [
+    Expect(
+        input=dict(
+            arr=arr,
+            out=np.zeros(arr.shape, dtype=tgt),
+            rounding_mode="nearest-even",
+        ),
+        expected=arr.astype(tgt),
+        id=f"{layout}-{src}-to-{tgt}",
+    )
+    for src, tgt in LAYOUT_DTYPE_PATHS
+    for layout, arr in layout_arrays(src)
+]
+
+
+@pytest.mark.parametrize(
+    "case", INPUT_LAYOUT_CASES, ids=[c.id for c in INPUT_LAYOUT_CASES]
+)
+def test_input_memory_layout(case: Expect):
+    """The input is read in logical element order for any memory layout."""
+    _run_into(case)

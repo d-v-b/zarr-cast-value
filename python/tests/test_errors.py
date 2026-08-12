@@ -87,11 +87,6 @@ def test_cast_array_into_positional_args_rejected():
 
 
 # ---------------------------------------------------------------------------
-# Non-contiguous input
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # Numpy dtype objects as target_dtype
 # ---------------------------------------------------------------------------
 
@@ -112,15 +107,21 @@ def test_numpy_dtype_as_target_dtype(target_dtype):
 
 
 # ---------------------------------------------------------------------------
-# Non-contiguous input
+# Row-major backstop in the private extension module
 # ---------------------------------------------------------------------------
 
 
-def test_non_contiguous_input():
-    arr = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float64)[::2]
-    assert not arr.flags["C_CONTIGUOUS"]
-    case = ExpectFail(
-        input=dict(arr=arr, target_dtype="uint8", rounding_mode="nearest-even"),
-        exception=ValueError, match="contiguous",
-    )
-    case.check(cast_array)
+def test_private_module_rejects_non_row_major():
+    """The wrapper normalizes layout; the raw binding must still reject
+    non-row-major input rather than read its buffer in the wrong order."""
+    from cast_value_rs._cast_value_rs import cast_array as raw_cast_array
+
+    arr = np.arange(12, dtype=np.float64).reshape(3, 4).T
+    with pytest.raises(ValueError, match="row-major"):
+        raw_cast_array(
+            arr,
+            target_dtype="uint16",
+            rounding_mode="nearest-even",
+            out_of_range_mode=None,
+            scalar_map_entries=None,
+        )

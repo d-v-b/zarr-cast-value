@@ -7,7 +7,7 @@ import pytest
 
 from cast_value_rs import cast_array
 
-from .conftest import Expect, ExpectFail, nan_eq
+from .conftest import LAYOUT_DTYPE_PATHS, Expect, ExpectFail, layout_arrays, nan_eq
 
 # ---------------------------------------------------------------------------
 # float -> int
@@ -397,3 +397,62 @@ def test_shape(case: Expect):
     result = cast_array(**case.input)
     assert result.shape == case.expected.shape
     case.check(result)
+
+
+# ---------------------------------------------------------------------------
+# Memory layout
+# ---------------------------------------------------------------------------
+
+# A numpy array's buffer only matches logical (row-major) order when the array
+# is row-major. Casting must follow the logical order for every layout, not the
+# order the elements happen to sit in memory.
+MEMORY_LAYOUT_CASES = [
+    Expect(
+        input=dict(arr=arr, target_dtype=tgt, rounding_mode="nearest-even"),
+        expected=arr.astype(tgt),
+        id=f"{layout}-{src}-to-{tgt}",
+    )
+    for src, tgt in LAYOUT_DTYPE_PATHS
+    for layout, arr in layout_arrays(src)
+]
+
+
+@pytest.mark.parametrize(
+    "case", MEMORY_LAYOUT_CASES, ids=[c.id for c in MEMORY_LAYOUT_CASES]
+)
+def test_memory_layout(case: Expect):
+    """Casting depends on logical element order, never on memory layout."""
+    result = cast_array(**case.input)
+    assert result.shape == case.input["arr"].shape
+    case.check(result)
+
+
+def test_memory_layout_clamp():
+    """Non-contiguous input through the clamp fast path.
+
+    Clamp with a supported rounding mode selects the SIMD kernels; make sure
+    layout normalization holds on that path too, not just the scalar one.
+    """
+    arr = np.array([[-1.0, 300.0, 5.0], [7.0, 260.0, -9.0]], dtype=np.float32).T
+    assert not arr.flags["C_CONTIGUOUS"]
+    result = cast_array(
+        arr,
+        target_dtype="uint8",
+        rounding_mode="nearest-even",
+        out_of_range_mode="clamp",
+    )
+    assert np.array_equal(result, np.clip(arr, 0, 255).astype(np.uint8))
+
+
+def test_memory_layout_scalar_map():
+    """Scalar map entries match values, not memory positions, on a view."""
+    arr = np.arange(12, dtype=np.float64).reshape(3, 4).T
+    result = cast_array(
+        arr,
+        target_dtype="uint16",
+        rounding_mode="nearest-even",
+        scalar_map_entries=[(5.0, 500)],
+    )
+    expected = arr.astype(np.uint16)
+    expected[arr == 5.0] = 500
+    assert np.array_equal(result, expected)

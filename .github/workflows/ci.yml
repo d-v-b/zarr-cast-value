@@ -24,10 +24,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Format
-        run: cargo fmt --all -- --check
+        run: just fmt-check
       - name: Clippy
-        run: cargo clippy -p zarr-cast-value --tests -- -D warnings
+        run: just lint
 
   rust:
     runs-on: ${{ matrix.runner }}
@@ -43,8 +44,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Test
-        run: cargo test -p zarr-cast-value
+        run: just test-rust
 
   python:
     runs-on: ubuntu-latest
@@ -56,7 +58,8 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
-      - name: Build
-        run: uv run --directory python --with maturin maturin develop
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      # `test-python` depends on `build-python`, so this builds the
+      # extension module before running pytest against it.
       - name: Test
-        run: uv run --directory python --group test pytest
+        run: just test-python

@@ -32,12 +32,12 @@ build:
 # Build the Python extension module into the `python` project's venv.
 [group('build')]
 build-python:
-    uv run --directory {{python_dir}} --with maturin maturin develop
+    uv run --directory {{ python_dir }} --with maturin maturin develop
 
 # Build a release wheel into `python/target/wheels`.
 [group('build')]
 wheel:
-    uv run --directory {{python_dir}} --with maturin maturin build --release
+    uv run --directory {{ python_dir }} --with maturin maturin build --release
 
 # Run the Rust test suite.
 [group('test')]
@@ -47,7 +47,7 @@ test-rust:
 # Run the Python test suite against a freshly built extension module.
 [group('test')]
 test-python: build-python
-    uv run --directory {{python_dir}} --group test pytest
+    uv run --directory {{ python_dir }} --group test pytest
 
 # Run every test suite.
 [group('test')]
